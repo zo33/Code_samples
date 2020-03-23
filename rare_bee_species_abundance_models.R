@@ -1,9 +1,12 @@
 ################
 # Median Abundance Analysis #
 ################
-## Uses alt method for median richness
-## Using colleen date only
-## DIFFERENCE HERE IS EXTRACTS COEF FOR EACH CV TO GET CI and incidence rate
+# Analyzing the landscape factors that effect rare bee species abundance in 
+# New Jersey forest fragments. Done at three different landscape scales (1000m,
+# 500m, 300m) to see which one creates the best (adjusted R squared) model. 
+# Done using a LASSO approach where n simulations were conducted in order to account 
+# for random variation in model results due to random cv selection, and to create 
+# a distribution of values for coefficients. 
 
 ## Set up environment: set seed, packages, functions
 
@@ -30,7 +33,6 @@ library(tibble)
 library(tidyr)
 library(scales)
 library(cowplot)
-#library(drlib)
 library(grid)
 library(gridExtra)
 library(parallel); no_cores <- detectCores() - 1
@@ -82,6 +84,7 @@ output.function.poisson <- function(cv_size){
 }
 
 ## Read in data 
+# Directory will depend on personal computer vs cluster computing
 
 if(getwd() == "/Users/Zoe/Desktop/Bee_Project/Analysis1"){
   
@@ -116,7 +119,7 @@ if(getwd() == "/Users/Zoe/Desktop/Bee_Project/Analysis1"){
   
 }
 
-# Get together inverse distance matrix
+# Get together inverse distance matrix for spatial autocorrelation tests
 sites <- merge(sites, abun, by = "Unit_Nm")
 sites <- sites[!duplicated(sites[1]),]
 site.dists <- as.matrix(dist(cbind(sites$Longitude, sites$Latitude),
@@ -129,6 +132,7 @@ diag(site.dists.inv) <- 0
 ##### Models ######
 ###################
 
+# Look at data distribution 
 plot(density(abun$Rare_Abundance)); shapiro.test(abun$Rare_Abundance)
 
 
@@ -137,10 +141,12 @@ plot(density(abun$Rare_Abundance)); shapiro.test(abun$Rare_Abundance)
 
 ## Get variables in order
 
+# Create dataframe with predictors / response variable
 data.1km <- abun[c(2,3)] %>% left_join(preds_1km, by = "Unit_Nm") %>% 
   left_join(effort[c(2,3)], by = "Unit_Nm") %>% left_join(sites[c(1,7)], by = "Unit_Nm") %>%
   dplyr::select(-Unit_Nm)
 
+# Group land use predictors by their Anderson land use subsection
 colnames(data.1km)[6:71] <- substr(colnames(data.1km[6:71]), 1, 3)
 for(i in 6:70){
   
@@ -159,31 +165,16 @@ for(i in 6:70){
 
 data.1km <- data.1km[,-which(names(data.1km) %in% "delete")]
 
-for(i in ncol(data.1km):2){ # take out variables where one / two nonzeros are driving relationship
+# Look at univariate relationships between response /predictors
+for(i in ncol(data.1km):2){
   pred <- names(data.1km)[i]
   plot(Rare_Abundance ~ get(pred, data.1km), data = data.1km, xlab = pred)
 } 
 
-data.1km <- data.1km[-c(grep("X13",colnames(data.1km)), grep("X14",colnames(data.1km)),
-                              grep("X15",colnames(data.1km)),
-                              grep("X16",colnames(data.1km)), 
-                              grep("X22",colnames(data.1km)),
-                              grep("X23",colnames(data.1km)), 
-                              grep("X42",colnames(data.1km)), 
-                              grep("X51",colnames(data.1km)), 
-                              grep("X52",colnames(data.1km)), 
-                              grep("X53",colnames(data.1km)),
-                              grep("X54",colnames(data.1km)), 
-                              grep("X61",colnames(data.1km)), 
-                              grep("X71",colnames(data.1km)),
-                              grep("X72",colnames(data.1km)), 
-                              grep("X73",colnames(data.1km)),
-                              grep("X74",colnames(data.1km)), 
-                              grep("Road_length_km",colnames(data.1km)))]                         
-
-
 
 ## Take out correlated predictors
+# Regularized regression can handle correlated predictors, but want to choose the 
+# predictors that would be selected
 
 data.1km.cleaned <- data.1km
 
@@ -201,12 +192,11 @@ data.1km.cleaned <- data.1km.cleaned[-grep("^Number_Houses$",colnames(data.1km.c
 data.1km.cleaned <- data.1km.cleaned[-grep("^SDI_TYPE12_Nat$",colnames(data.1km.cleaned))] 
 data.1km.cleaned <- data.1km.cleaned[-grep("^LDI$",colnames(data.1km.cleaned))] 
 
-#saveRDS(data.1km.cleaned, "Bee_Ecology_Models/abundance_data_univariate_graphs.rds")
 
 ## Run Lasso
 
 lambdas_to_try <- c(0,10^seq(-3, 2, length.out = 1000))
-n <- 1000
+n <- 10000
 
 y <- data.1km.cleaned %>% dplyr::select(Rare_Abundance) %>% as.matrix()
 X <- data.1km.cleaned %>% dplyr::select(-Rare_Abundance) %>% as.matrix()
@@ -277,30 +267,10 @@ for(i in 6:65){
 
 data.500m <- data.500m[,-which(names(data.500m) %in% "delete")]
 
-for(i in ncol(data.500m):2){ # take out variables where one / two nonzeros are driving relationship
+for(i in ncol(data.500m):2){ 
   pred <- names(data.500m)[i]
   plot(Rare_Abundance ~ get(pred, data.500m), data = data.500m, xlab = pred)
 } 
-
-
-data.500m <- data.500m[-c(grep("X13",colnames(data.500m)), grep("X14",colnames(data.500m)), 
-                                grep("X16",colnames(data.500m)), 
-                                grep("X17",colnames(data.500m)),
-                                grep("X22",colnames(data.500m)), 
-                                grep("X23",colnames(data.500m)), 
-                                grep("X24",colnames(data.500m)),
-                                grep("X42",colnames(data.500m)), 
-                                grep("X51",colnames(data.500m)),
-                                grep("X52",colnames(data.500m)), 
-                                grep("X53",colnames(data.500m)),
-                                grep("X54",colnames(data.500m)), 
-                                grep("X71",colnames(data.500m)),
-                                grep("X72",colnames(data.500m)), 
-                                grep("X73",colnames(data.500m)),
-                                grep("X74",colnames(data.500m)),
-                                grep("LDI",colnames(data.500m)), 
-                                grep("Road_length_km",colnames(data.500m))
-)]
 
 
 ## Take out correlated predictors
@@ -324,7 +294,7 @@ data.500m.cleaned <- data.500m.cleaned[-grep("^MEAN_PATCH$",colnames(data.500m.c
 ## Run Lasso
 
 lambdas_to_try <- c(0,10^seq(-3, 2, length.out = 1000))
-n <- 1000
+n <- 10000
 
 y <- data.500m.cleaned %>% dplyr::select(Rare_Abundance) %>% as.matrix()
 X <- data.500m.cleaned %>% dplyr::select(-Rare_Abundance) %>% as.matrix()
@@ -394,28 +364,10 @@ for(i in 6:63){
 
 data.300m <- data.300m[,-which(names(data.300m) %in% "delete")]
 
-for(i in ncol(data.300m):2){ # take out variables where one / two nonzeros are driving relationship
+for(i in ncol(data.300m):2){ 
   pred <- names(data.300m)[i]
   plot(Rare_Abundance ~ get(pred, data.300m), data = data.300m, xlab = pred)
 } 
-
-data.300m <- data.300m[-c(grep("X13",colnames(data.300m)), grep("X14",colnames(data.300m)),
-                                grep("X17",colnames(data.300m)), 
-                                grep("X22",colnames(data.300m)), 
-                                grep("X23",colnames(data.300m)), 
-                                grep("X24",colnames(data.300m)), 
-                                grep("X42",colnames(data.300m)), 
-                                grep("X51",colnames(data.300m)),
-                                grep("X52",colnames(data.300m)), 
-                                grep("X53",colnames(data.300m)),
-                                grep("X54",colnames(data.300m)), 
-                                grep("X71",colnames(data.300m)),
-                                grep("X72",colnames(data.300m)), 
-                                grep("X73",colnames(data.300m)),
-                                grep("X74",colnames(data.300m)), 
-                                grep("LDI",colnames(data.300m)), 
-                                grep("Road_length_km",colnames(data.300m))
-)]
 
 ## Take out correlated predictors
 
@@ -439,7 +391,7 @@ data.300m.cleaned <- data.300m.cleaned[-grep("^SDI_TYPE12_Nat$",colnames(data.30
 ## Run Lasso
 
 lambdas_to_try <- c(0,10^seq(-3, 2, length.out = 1000))
-n <- 1000
+n <- 10000
 
 y <- data.300m.cleaned %>% dplyr::select(Rare_Abundance) %>% as.matrix()
 X <- data.300m.cleaned %>% dplyr::select(-Rare_Abundance) %>% as.matrix()
@@ -486,9 +438,9 @@ summary(i.p.300m)
 
 if(getwd() == "/Users/Zoe/Desktop/Bee_Project/Analysis1"){
   
-  #saveRDS(m.1km, "Bee_Ecology_Models/abundance_1km.rds")
-  #saveRDS(m.500m, "Bee_Ecology_Models/abundance_500m.rds")
-  #saveRDS(m.300m, "Bee_Ecology_Models/abundance_300m.rds")
+  saveRDS(m.1km, "Bee_Ecology_Models/abundance_1km.rds")
+  saveRDS(m.500m, "Bee_Ecology_Models/abundance_500m.rds")
+  saveRDS(m.300m, "Bee_Ecology_Models/abundance_300m.rds")
   
 } else{
   
